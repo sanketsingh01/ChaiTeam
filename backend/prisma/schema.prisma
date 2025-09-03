@@ -25,8 +25,23 @@ model User {
   groupsLeader     Groups?           @relation("GroupLeader")
   joinApplications JoinApplication?
   notices          NoticeBoard[]     
+  userActivities   UserActivity[]    
+  groupActivities  GroupActivity[]   @relation("GroupActivityUser")
+  batchActivities  BatchActivity[]   @relation("BatchActivityUser")
+  targetGroupActivities GroupActivity[] @relation("TargetUserRelation")
+  targetBatchActivities BatchActivity[] @relation("BatchTargetUserRelation")
+  performedBatchActivities BatchActivity[] @relation("PerformerRelation")
 
   @@map("users")
+}
+
+model BatchMember {
+  id      String @id @default(uuid())
+  userId  String
+  batchId String
+  batch   Batch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  
+  @@map("batch_members")
 }
 
 model Batch {
@@ -38,20 +53,9 @@ model Batch {
   description  String?
   batchMembers BatchMember[]
   groups       Groups[]
+  batchActivities BatchActivity[]
 
   @@map("batches")
-}
-
-model BatchMember {
-  id        String   @id @default(uuid())
-  batchId   String
-  email     String
-  name      String
-  createdAT DateTime @default(now())
-  batch     Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
-
-  @@unique([batchId, email])
-  @@map("batch_members")
 }
 
 model Groups {
@@ -74,6 +78,8 @@ model Groups {
   leader           User              @relation("GroupLeader", fields: [leader_id], references: [id])
   joinApplications JoinApplication[]
   notices          NoticeBoard[]     
+  groupActivities  GroupActivity[]
+
   @@map("groups")
 }
 
@@ -117,11 +123,76 @@ model NoticeBoard {
   is_edited   Boolean      @default(false)
   status      NoticeStatus @default(ACTIVE)
 
-  // Relations
   group Groups @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user  User   @relation(fields: [userId], references: [id])
 
   @@map("noticeboard")
+}
+
+model UserActivity {
+  id           String         @id @default(uuid())
+  userId       String
+  activityType UserActivityType
+  description  String
+  metadata     Json?
+  createdAt    DateTime       @default(now())
+  ipAddress    String?
+  userAgent    String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_activities")
+}
+
+model GroupActivity {
+  id           String          @id @default(uuid())
+  groupId      String
+  userId       String
+  activityType GroupActivityType
+  description  String
+  targetUserId String?
+  metadata     Json?
+  createdAt    DateTime        @default(now())
+  isSystemGenerated Boolean    @default(false)
+
+  group      Groups @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User   @relation("GroupActivityUser", fields: [userId], references: [id])
+  targetUser User?  @relation("TargetUserRelation", fields: [targetUserId], references: [id])
+
+  @@map("group_activities")
+}
+
+model BatchActivity {
+  id           String          @id @default(uuid())
+  batchId      String
+  userId       String?
+  activityType BatchActivityType
+  description  String
+  targetUserId String?
+  performedBy  String?
+  metadata     Json?
+  createdAt    DateTime        @default(now())
+  isMilestone  Boolean         @default(false)
+
+  batch      Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user       User? @relation("BatchActivityUser", fields: [userId], references: [id])
+  targetUser User? @relation("BatchTargetUserRelation", fields: [targetUserId], references: [id])
+  performer  User? @relation("PerformerRelation", fields: [performedBy], references: [id])
+
+  @@map("batch_activities")
+}
+
+model SystemActivity {
+  id           String            @id @default(uuid())
+  activityType SystemActivityType
+  description  String
+  metadata     Json?
+  createdAt    DateTime          @default(now())
+  severity     SystemSeverity    @default(INFO)
+  component    String
+  requiresAttention Boolean      @default(false)
+
+  @@map("system_activities")
 }
 
 enum userRole {
@@ -146,7 +217,7 @@ enum groupStatus {
   INACTIVE
   PRIVATE
   FULL
-  DISBANNED
+  DISBANDED
 }
 
 enum applicationStatus {
@@ -166,4 +237,58 @@ enum NoticeType {
 enum NoticeStatus {
   ACTIVE
   DELETED
+}
+
+enum UserActivityType {
+  USER_ONBOARDED
+  USER_PROFILE_UPDATED
+  USER_LOGIN
+  USER_LOGOUT
+  BATCH_JOINED
+  BATCH_LEFT
+  PASSWORD_RESET_REQUESTED
+  USER_REACTIVATED
+}
+
+enum GroupActivityType {
+  GROUP_CREATED
+  GROUP_JOINED
+  GROUP_LEFT
+  MEMBER_KICKED
+  LEADERSHIP_CHANGED
+  GROUP_DISBANDED
+  JOIN_REQUEST_SENT
+  JOIN_REQUEST_APPROVED
+  JOIN_REQUEST_REJECTED
+  GROUP_SETTINGS_UPDATED
+}
+
+enum BatchActivityType {
+  BATCH_CREATED
+  BATCH_UPDATED
+  BATCH_ARCHIVED
+  USER_ADDED
+  USER_REMOVED
+  DEADLINE_CREATED
+  ANNOUNCEMENT_POSTED
+  GROUP_FORMED
+  BATCH_COMPLETED
+}
+
+enum SystemActivityType {
+  SYSTEM_STARTUP
+  SYSTEM_SHUTDOWN
+  BACKUP_COMPLETED
+  MAINTENANCE_STARTED
+  MAINTENANCE_COMPLETED
+  DATABASE_MIGRATION
+  SECURITY_ALERT
+  PERFORMANCE_ALERT
+}
+
+enum SystemSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
 }
